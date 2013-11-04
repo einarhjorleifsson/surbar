@@ -1,0 +1,28 @@
+Package: surbar
+Type: Package
+Title: Estimates population dynamics (recruitment, stock indices and mortality)
+    from survey indice at age.
+Version: 1.0
+Date: 2013-03-18
+Author: Coby Needle <C.Needle@marlab.ac.uk>
+Maintainer: No one yet, package seeder: Einar Hjorleifsson
+    <einar.hjorleifsson@gmail.com>
+Description: The method is described in: D.J. Beare, C.L. Needle, F. Burns and
+    D.G. Reid. 2005. Using survey data independently from commercial data in
+    stock assessment: an example using haddock in ICES Division VIa. ICES
+    Journal of Marine Science 62(5): 996-1005.
+Depends:
+    MASS,
+    minpack.lm,
+    reshape2
+Suggests:
+    knitr
+VignetteBuilder: knitr
+LazyData: yes
+License: GPL-2
+Collate:
+    'dataSurba.R'
+    'surba_opt.R'
+    'surbar_generics.R'
+    'surbar_manipulate.R'
+    'surbar_package.R'
