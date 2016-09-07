@@ -1,0 +1,438 @@
+%\VignetteIndexEntry{surbar}
+%\VignetteEngine{knitr::knitr}
+\documentclass[12pt,a4]{article}
+\usepackage{geometry}
+\geometry{verbose,tmargin=2.5cm,bmargin=2.5cm,lmargin=2.5cm,margin=2.5cm}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{float}
+\usepackage{textcomp}
+\usepackage{amstext}
+\usepackage{graphicx}
+
+\begin{document}
+
+\title{confrontation with \emph{surbaR}}
+
+
+\author{Einar Hjörleifsson}
+
+\maketitle
+
+\newpage{}
+<<setup, echo=FALSE>>=
+rm(list=ls())
+suppressPackageStartupMessages(require(knitr))
+suppressPackageStartupMessages(require(plyr))
+suppressPackageStartupMessages(require(reshape2))
+suppressPackageStartupMessages(require(ggplot2))
+suppressPackageStartupMessages(require(surbar))
+opts_chunk$set(warning=FALSE,
+               message=FALSE,
+               fig.align='center',
+               fig.path='figure/surbar/',
+               fig.width=6.5, 
+               fig.height=4,
+               tidy=TRUE,
+               tidy.opts=list(width.cutoff=40),
+               #echo=FALSE,
+               cache=TRUE,
+               cache.path='cache/surbar/')
+options(replace.assign=TRUE,width=90,tikzLatex="/opt/local/bin/pdflatex")
+@
+
+<<sessionInfo,echo=TRUE>>=
+sessionInfo()
+@
+
+\newpage{}
+\section*{Preamble}
+The following is a confrontation of survey data with a test R-packages with the working title \emph{surbar}.  The document as it now stands just decribes the code used to do analysis and some results in the form of figures. Data sets from two stocks are tested, North Sea Whiting and Cod in Icelandic waters.
+The original code was obtained from Coby Needle in January 2013. It consisted of two scripts, surbar.r and surbar\_function.r. The former was a demonstration of running the code using data from the North Sea Whiting. The latter contained functions used by the former, functions that needed to be sourced. Part of the scripts from two files were used as a base to generate functions to be included in the R-packages. Initially the aim was to change as little as possible in the original scripts, but as the developement proceeded some change took place. The core code is however still the same as originally obtained from Coby. The motivation for creating an R-packages from Coby's scripts was to hide as much as possible the details for data preparations and fittings. The plot functions in the original scripts were for the time being totally ignored and are hence not in the current packages.
+This document is an .Rnw document, demonstrating how the things can be run via the \emph{surbar}-packages. The Method section deals with the setups and fittings, the Result section show the plot-scripts used to generate the various figures (in ggplot2). In the latter the script used is shown prior to each figures.
+
+\section*{Method}
+
+\subsection*{North Sea Whiting}
+<<controls_nsWhiting>>=
+sw.file <- "whi47d_sw.dat"
+mat.file <- "whi47d_mat.dat"
+survey.file <- "whi47d_ef_surba.dat"
+zbarage.1 <- 2
+zbarage.2 <- 4
+ref.age <- 3
+lambda <- 1.0
+wt.vec <- rep(1.0, 6)
+@
+
+Read in stock weights:
+<<read_sw_nsWhiting>>=
+file <- system.file("extdata", sw.file, package="surbar")
+sw <- read.vpa.file(file,Format="data.frame")
+sw <- sw[,2:6]
+@
+Read in maturity data:
+<<read_mat_nsWhiting>>=
+file <- system.file("extdata", mat.file, package="surbar")
+mat <- read.vpa.file(file, Format = "data.frame")
+mat <- mat[,2:6]
+@
+Read in survey data:
+<<read_survey_nsWhiting>>=
+file <- system.file("extdata", survey.file, package="surbar")
+u <- read.survey.file(file)
+@
+Setup data object:
+<<setup_nsWhiting>>=
+
+## NOTE - PUT THIS FIRST BIT INTO surba_setup
+## so we would have surba_setup(ref.age,zbarage.1,zbarage2,lamda,sw,mat,sureys)
+dat <- list()
+dat$ref.age <- ref.age
+dat$zbarage.1 <- zbarage.1
+dat$zbarage.2 <- zbarage.2
+dat$lamda <- lambda
+dat$sw <- sw
+dat$mat <- mat
+dat$u <- u
+Dat.nsWhiting <- dat
+
+Surba.nsWhiting <- surba_setup(Dat.nsWhiting)
+@
+
+<<fit_nsWhiting>>=
+Fit.nsWhiting <- surba_fit(Surba.nsWhiting)
+Retro.nsWhiting <- surba_retro(Surba.nsWhiting,nYears=10)
+@
+
+
+\subsection*{Icelandic Cod}
+<<controls_iCod>>=
+Years <- 1985:2012
+Ages <- 1:10
+ref.age <- 6
+zbarage.1 <- 5
+zbarage.2 <- 10
+surveyNames <- c('smb','smh')
+surveyTime <- c(3.5/12,10.5/12)
+useFALL <- FALSE
+@
+
+Reading and manipulating data:
+<<readData_iCod>>=
+rbya <- iCod_rbx$rbya
+
+# stock weights
+i <- rbya$year %in% Years & rbya$age %in% Ages
+sw <- dcast(rbya[i,],year ~ age,value.var='sW')
+rownames(sw) <- sw$year
+sw <- sw[,2:ncol(sw)]
+
+# maturity
+i <- rbya$year %in% Years & rbya$age %in% Ages
+mat <- dcast(rbya[i,],year ~ age,value.var='mat')
+rownames(mat) <- mat$year
+mat <- mat[,2:ncol(mat)]
+mat[is.na(mat)] <- 0
+
+# spring survey
+tmp <- rbya[rbya$year %in% 1985:2012 & rbya$age %in% 1:10,c('year','age','oU1')]
+tmp$oU1[is.na(tmp$oU1)] <- 0
+u1 <- dcast(tmp,year ~ age,value.var='oU1')
+row.names(u1) <- u1$year
+u1 <- u1[,2:ncol(u1)]
+u1 <- list(name=surveyNames[1],
+           rho=surveyTime[1],
+           tab=u1)
+
+# fall survey
+tmp <- rbya[rbya$year %in% 1996:2011 & rbya$age %in% 1:9,c('year','age','oU2')]
+#tmp$oU2[is.na(tmp$oU2)] <- 0
+u2 <- dcast(tmp,year ~ age,value.var='oU2')
+row.names(u2) <- u2$year
+u2 <- u2[,2:ncol(u2)]
+u2 <- list(name=surveyNames[2],
+           rho=surveyTime[2],
+           tab=u2)
+
+dat <- list()
+dat$ref.age <- ref.age
+dat$zbarage.1 <- zbarage.1
+dat$zbarage.2 <- zbarage.2
+dat$lamda <- 1.0  # not sure what this is, should also be lambda
+dat$sw <- sw
+dat$mat <- mat
+if(useFALL)  dat$u <- list(u1,u2)
+if(!useFALL) dat$u <- list(u1)
+Dat.iCod <- dat
+# nothing up my sleeve
+rm(mat,rbya,sw,tmp,Ages,Years,i,ref.age,surveyNames,surveyTime,u1,u2,useFALL,zbarage.1,zbarage.2,dat)
+
+Surba.iCod <- surba_setup(Dat.iCod)
+@
+
+
+
+
+
+<<fit_iCod>>=
+Fit.iCod <- surba_fit(Surba.iCod)
+Retro.iCod <- surba_retro(Surba.iCod,nYears=10)
+@
+
+
+\newpage{}
+\section*{Results - as in figures}
+\subsection*{Norht Sea whiting}
+<<plotWhiting>>=
+FIT <- Fit.nsWhiting
+RET <- Retro.nsWhiting
+@
+
+
+<<logResiduals01_whiting>>=
+p <- ggplot(FIT$res,aes(year,value,colour=factor(age))) + 
+  facet_wrap(~ survey,ncol=1) +
+  labs(x='',y='Log residuals',colour='Age') +
+  scale_color_brewer(palette='Set3')
+p + geom_line()
+@
+
+
+<<logResiduals02_whiting>>=
+p + stat_smooth(se=FALSE) + geom_point()
+@
+
+
+<<logResiduals03_whiting, fig.height=8>>=
+res <- ddply(FIT$res,c('year','survey','age'),transform,ymin=min(0,value),ymax=max(0,value))
+ggplot(res,aes(year)) + geom_linerange(aes(ymin=ymin,ymax=ymax,colour=value>0),lwd=3) +
+  facet_grid(age ~ survey) +
+  scale_colour_brewer(palette='Set1') +
+  theme(legend.position='none')
+@
+
+<<par_whiting, fig.height=3>>=
+parF <- melt(FIT$boot$par$f)
+names(parF) <- c('iter','year','value')
+parF <- ddply(parF,c('year'),summarise,
+               q05=quantile(value,0.05),
+               q50=quantile(value,0.50),
+               q95=quantile(value,0.95),
+               ave=mean(value))
+parF$variable <- 'Zmort'
+ggplot(parF,aes(year)) +
+  geom_ribbon(aes(ymin=q05,ymax=q95),fill='grey') +
+  geom_line(aes(y=q50)) +
+  geom_point(aes(y=ave),colour='red',size=2) +
+  facet_wrap(~ variable,scale='free_y') +
+  labs(x='',y='')
+
+sel <- melt(FIT$boot$par$s)
+names(sel) <- c('iter','age','value')
+sel <- ddply(sel,c('age'),summarise,
+             q05=quantile(value,0.05),
+               q50=quantile(value,0.50),
+               q95=quantile(value,0.95),
+               ave=mean(value))   
+sel$variable <- 'selection'
+ggplot(sel,aes(age)) +
+  geom_ribbon(aes(ymin=q05,ymax=q95),fill='grey') +
+  geom_line(aes(y=q50)) +
+  geom_point(aes(y=ave),colour='red',size=2) +
+  facet_wrap(~ variable,scale='free_y') +
+  labs(x='',y='') +
+  geom_vline(xintercept=FIT$ref.age)
+
+rec <- melt(FIT$boot$par$r)
+names(rec) <- c('iter','yc','value')
+rec$value <- exp(rec$value)
+rec <- ddply(rec,c('yc'),summarise,
+             q05=quantile(value,0.05),
+               q50=quantile(value,0.50),
+               q95=quantile(value,0.95),
+               ave=mean(value))
+rec$variable <- 'r'
+ggplot(rec,aes(yc)) + 
+    geom_ribbon(aes(ymin=q05,ymax=q95),fill='grey') +
+  geom_line(aes(y=q50)) +
+  geom_point(aes(y=ave),colour='red',size=2) +
+  facet_wrap(~ variable,scale='free_y') +
+  labs(x='',y='') +
+  geom_vline(xintercept=1983.5)
+@
+
+<<summaryPlot1_whiting, fig.height=8>>=
+rbyBootQ <- melt(FIT$boot$rby[,1:5],id.vars='year')
+rbyBootQ <- ddply(rbyBootQ,c('year','variable'),summarise,
+               q05=quantile(value,0.05),
+               q50=quantile(value,0.50),
+               q95=quantile(value,0.95),
+               ave=mean(value))
+p <- ggplot(rbyBootQ,aes(year)) +
+  geom_ribbon(aes(ymin=q05,ymax=q95),fill='grey80') +
+  geom_line(aes(y=q50)) +
+  geom_point(aes(y=ave),colour='red',size=2) +
+  facet_wrap(~ variable,scale='free_y') +
+  labs(x='',y='') +
+  geom_point(data=melt(FIT$rby,id.var='year'),aes(year,value),col='green',shape=3)
+p
+@
+
+
+<<summaryPlot2_whiting, fig.height=8>>=
+Zmort <- FIT$boot$z
+ZmortQ <- melt(Zmort[,c(1:(ncol(Zmort)-1))],id.vars=c('year'))
+ZmortQ <- ddply(ZmortQ,c('year','variable'),summarise,
+                q05=quantile(value,0.05),
+                q50=quantile(value,0.50),
+                q95=quantile(value,0.95),
+                qmean=mean(value))
+ggplot(ZmortQ,aes(year)) + geom_ribbon(aes(ymin=q05,ymax=q95),fill='grey90') +
+  geom_line(aes(y=q50)) +
+  geom_point(aes(y=qmean),colour='red') +
+  facet_wrap(~ variable,scale='free_y') +
+  labs(x='',y='mortality')          
+@
+
+
+<<retroPlot_whiting, fig.height=8>>=
+ggplot(melt(RET,id.vars='year'),aes(year,value)) + 
+  geom_line(aes(group=L1)) +
+  facet_wrap(~ variable,scale='free_y') +
+  geom_line(data=melt(FIT$rby,id.vars='year'),aes(year,value),col='red')
+@
+
+
+<<superimposedPlot_whiting, fig.height=8>>=
+p + geom_line(data=melt(RET,id.vars='year'),aes(year,value,group=L1),col='orange',alpha=0.4)
+@
+
+\newpage{}
+\subsection*{Icelandic cod}
+<<plotCod>>=
+FIT <- Fit.iCod
+RET <- Retro.iCod
+@
+
+
+<<logResiduals01_cod>>=
+p <- ggplot(FIT$res,aes(year,value,colour=factor(age))) + 
+  facet_wrap(~ survey,ncol=1) +
+  labs(x='',y='Log residuals',colour='Age') +
+  scale_color_brewer(palette='Set3')
+p + geom_line()
+@
+
+
+<<logResiduals02_cod>>=
+p + stat_smooth(se=FALSE) + geom_point()
+@
+
+
+<<logResiduals03_cod, fig.height=8>>=
+res <- ddply(FIT$res,c('year','survey','age'),transform,ymin=min(0,value),ymax=max(0,value))
+ggplot(res,aes(year)) + geom_linerange(aes(ymin=ymin,ymax=ymax,colour=value>0),lwd=3) +
+  facet_grid(age ~ survey) +
+  scale_colour_brewer(palette='Set1') +
+  theme(legend.position='none')
+@
+
+<<par_cod, fig.height=3>>=
+parF <- melt(FIT$boot$par$f)
+names(parF) <- c('iter','year','value')
+parF <- ddply(parF,c('year'),summarise,
+               q05=quantile(value,0.05),
+               q50=quantile(value,0.50),
+               q95=quantile(value,0.95),
+               ave=mean(value))
+parF$variable <- 'Zmort'
+ggplot(parF,aes(year)) +
+  geom_ribbon(aes(ymin=q05,ymax=q95),fill='grey') +
+  geom_line(aes(y=q50)) +
+  geom_point(aes(y=ave),colour='red',size=2) +
+  facet_wrap(~ variable,scale='free_y') +
+  labs(x='',y='')
+
+sel <- melt(FIT$boot$par$s)
+names(sel) <- c('iter','age','value')
+sel <- ddply(sel,c('age'),summarise,
+             q05=quantile(value,0.05),
+               q50=quantile(value,0.50),
+               q95=quantile(value,0.95),
+               ave=mean(value))   
+sel$variable <- 'selection'
+ggplot(sel,aes(age)) +
+  geom_ribbon(aes(ymin=q05,ymax=q95),fill='grey') +
+  geom_line(aes(y=q50)) +
+  geom_point(aes(y=ave),colour='red',size=2) +
+  facet_wrap(~ variable,scale='free_y') +
+  labs(x='',y='') +
+  geom_vline(xintercept=FIT$ref.age)
+
+rec <- melt(FIT$boot$par$r)
+names(rec) <- c('iter','yc','value')
+rec$value <- exp(rec$value)
+rec <- ddply(rec,c('yc'),summarise,
+             q05=quantile(value,0.05),
+               q50=quantile(value,0.50),
+               q95=quantile(value,0.95),
+               ave=mean(value))
+rec$variable <- 'r'
+ggplot(rec,aes(yc)) + 
+    geom_ribbon(aes(ymin=q05,ymax=q95),fill='grey') +
+  geom_line(aes(y=q50)) +
+  geom_point(aes(y=ave),colour='red',size=2) +
+  facet_wrap(~ variable,scale='free_y') +
+  labs(x='',y='') +
+  geom_vline(xintercept=1983.5)
+@
+
+<<summaryPlot1_cod, fig.height=8>>=
+rbyBootQ <- melt(FIT$boot$rby[,1:5],id.vars='year')
+rbyBootQ <- ddply(rbyBootQ,c('year','variable'),summarise,
+               q05=quantile(value,0.05),
+               q50=quantile(value,0.50),
+               q95=quantile(value,0.95),
+               ave=mean(value))
+p <- ggplot(rbyBootQ,aes(year)) +
+  geom_ribbon(aes(ymin=q05,ymax=q95),fill='grey80') +
+  geom_line(aes(y=q50)) +
+  geom_point(aes(y=ave),colour='red',size=2) +
+  facet_wrap(~ variable,scale='free_y') +
+  labs(x='',y='') +
+  geom_point(data=melt(FIT$rby,id.var='year'),aes(year,value),col='green',shape=3)
+p
+@
+
+
+<<summaryPlot2_cod, fig.height=8>>=
+Zmort <- FIT$boot$z
+ZmortQ <- melt(Zmort[,c(1:(ncol(Zmort)-1))],id.vars=c('year'))
+ZmortQ <- ddply(ZmortQ,c('year','variable'),summarise,
+                q05=quantile(value,0.05),
+                q50=quantile(value,0.50),
+                q95=quantile(value,0.95),
+                qmean=mean(value))
+ggplot(ZmortQ,aes(year)) + geom_ribbon(aes(ymin=q05,ymax=q95),fill='grey90') +
+  geom_line(aes(y=q50)) +
+  geom_point(aes(y=qmean),colour='red') +
+  facet_wrap(~ variable,scale='free_y') +
+  labs(x='',y='mortality')          
+@
+
+
+<<retroPlot_cod, fig.height=8>>=
+ggplot(melt(RET,id.vars='year'),aes(year,value)) + 
+  geom_line(aes(group=L1)) +
+  facet_wrap(~ variable,scale='free_y') +
+  geom_line(data=melt(FIT$rby,id.vars='year'),aes(year,value),col='red')
+@
+
+
+<<superimposedPlot_cod, fig.height=8>>=
+p + geom_line(data=melt(RET,id.vars='year'),aes(year,value,group=L1),col='orange',alpha=0.4)
+@
+
+
+\end{document}
